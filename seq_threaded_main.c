@@ -135,9 +135,10 @@ int main(int argc, char **argv) {
     /*---- output performance numbers ---------------------------------------*/
     if (is_output_timing) {
         io_timing += wtime() - timing;
-        printf("\nPerforming **** Regular Kmeans (sequential version) ****\n");
+        printf("\nPerforming **** Regular Kmeans (threaded version) ****\n");
 
         printf("Input file:     %s\n", filename);
+        printf("threads number   = %d\n", threads);
         printf("numObjs       = %d\n", numObjs);
         printf("numCoords     = %d\n", numCoords);
         printf("numClusters   = %d\n", numClusters);

@@ -23,6 +23,7 @@ int numClusters;
 int numCoords;
 int threads_no;
 Thread_Args* threads_structure;
+pthread_mutex_t lock;   //Mutex to lock region
 
 
 //PROTOTYPES
@@ -83,7 +84,7 @@ float** seq_threaded_kmeans(float **objects_,      /* in: [numObjs][numCoords] *
                    int threads_no_)
 {
     //Initialize local variables
-    int      i, j, index, loop=0;
+    int      i, w, j, index, z, loop=0;
     
     //Assign global variables
     numClusters = numClusters_;
@@ -126,7 +127,9 @@ float** seq_threaded_kmeans(float **objects_,      /* in: [numObjs][numCoords] *
 
     //Creating threads vector and structures
     pthread_t phys_threads[threads_no];
-    threads_structure = malloc (threads_no * sizeof (Thread_Args*));    
+    int threads_id [threads_no];
+    for (i = 0; i < threads_no; i ++) threads_id[i] = i;
+    threads_structure = malloc (threads_no * sizeof (Thread_Args));    
 
     //Temporary acumulator
     int temp_acumulator = 0;
@@ -145,23 +148,41 @@ float** seq_threaded_kmeans(float **objects_,      /* in: [numObjs][numCoords] *
     threads_structure[threads_no - 1].start_object = temp_acumulator;
     threads_structure[threads_no - 1].num_objects = numObjs - temp_acumulator;
 
+    if (pthread_mutex_init(&lock, NULL) != 0) 
+    { 
+        printf("\n mutex init has failed\n"); 
+
+    }
+
     //Runs the iterations
     do {
         delta = 0.0;
 
+        w = 0;
         //Create Threads (No critical region)
-        for (i = 0; i < threads_no; i ++)
+        while (w < threads_no)
 	    {
-	        int z = i;
-	        if (pthread_create(&phys_threads[i], NULL, assignMembership, (void*)z) != 0)
+
+
+	    	//pthread_mutex_lock(&lock); //Locks region
+	    	//int z = w;
+
+	        if (pthread_create(&(phys_threads[w]), NULL, assignMembership, (void*)(&threads_id[w])) != 0)
 	        {
-	          fprintf(stderr, "error: Cannot create thread # %d\n", z);
+	          fprintf(stderr, "error: Cannot create thread # %d\n", w);
 	          break;
 	        }
+	        
+	        
+
+	        w = w + 1;
+
+	        //pthread_mutex_unlock(&lock); //Locks region
+
 	    }
 
 	    //Waits for threads to finish
-        for (int w = 0; w < threads_no; w ++)
+        for (w = 0; w < threads_no; w ++)
         {
         	//pthread_join(phys_threads[w], NULL); 
         	if (pthread_join(phys_threads[w], NULL) != 0)
@@ -181,6 +202,7 @@ float** seq_threaded_kmeans(float **objects_,      /* in: [numObjs][numCoords] *
         }
             
         delta /= numObjs;	//Calculates percentage of changes
+
     } while (delta > threshold && loop++ < 500);
 
     *loop_iterations = loop + 1;
@@ -200,8 +222,7 @@ void *assignMembership(void *args)
 	int  i, j, index;
 
 	//Retrieving thread structure by given number of the thread
-	Thread_Args thread_arg = threads_structure[(int) args];
-
+	Thread_Args thread_arg = threads_structure[*(int*) args];
 
 	//Iterates over each object to assing its membership
 	for (i=thread_arg.start_object; i<(thread_arg.start_object + thread_arg.num_objects); i++) 
@@ -209,6 +230,8 @@ void *assignMembership(void *args)
             /* find the array index of nestest cluster center */
             index = find_nearest_cluster(numClusters, numCoords, objects[i],
                                          clusters);
+
+           // pthread_mutex_lock(&lock); //Locks region
 
             /* if membership changes, increase delta by 1 */
             if (membership[i] != index) delta += 1.0;
@@ -220,6 +243,8 @@ void *assignMembership(void *args)
             newClusterSize[index]++;
             for (j=0; j<numCoords; j++)
                 newClusters[index][j] += objects[i][j];
+
+           // pthread_mutex_unlock(&lock);   //Unlocks Region
         }
 
 }
